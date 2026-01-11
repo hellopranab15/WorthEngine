@@ -1,0 +1,6 @@
+@WorthEngine.Api_HostAddress = http://localhost:5237
+
+GET {{WorthEngine.Api_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
