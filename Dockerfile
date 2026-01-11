@@ -17,6 +17,12 @@ RUN dotnet publish -c Release -o /app/publish
 FROM mcr.microsoft.com/dotnet/aspnet:9.0
 WORKDIR /app
 COPY --from=build /app/publish .
+
+# Render Config
+ENV ASPNETCORE_HTTP_PORTS=8080
+ENV DOTNET_EnableDiagnostics=0
+# Limit GC Heap to avoid OOM on free tier (512MB RAM available)
+ENV DOTNET_GCHeapHardLimit=300M
+
 EXPOSE 8080
-ENV ASPNETCORE_URLS=http://+:8080
 ENTRYPOINT ["dotnet", "WorthEngine.Api.dll"]

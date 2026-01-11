@@ -6,6 +6,8 @@ services:
     plan: free
     region: singapore
     envVars:
+      - key: PORT
+        value: 8080
       - key: ASPNETCORE_ENVIRONMENT
         value: Production
       - key: MongoDB__DatabaseName
