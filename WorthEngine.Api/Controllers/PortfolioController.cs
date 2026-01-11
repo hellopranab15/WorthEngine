@@ -269,4 +269,22 @@ public class PortfolioController : ControllerBase
             return BadRequest(new { message = ex.Message });
         }
     }
+
+    [HttpPost("recalculate-xirr")]
+    public async Task<ActionResult> RecalculateAllXirr()
+    {
+        var userId = GetUserId();
+        if (string.IsNullOrEmpty(userId))
+            return Unauthorized();
+
+        try
+        {
+            await _portfolioService.RecalculateAllXirrAsync(userId);
+            return Ok(new { message = "XIRR recalculated successfully for all portfolios" });
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
 }

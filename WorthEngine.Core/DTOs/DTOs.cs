@@ -155,3 +155,16 @@ public record StockPriceResponse(
     string? Sector,
     long? MarketCap
 );
+
+public record StockSearchResult(
+    string Symbol,
+    string ShortName,
+    string LongName,
+    string Exchange,
+    string Type
+);
+
+public record MarketMoversResponse(
+    List<StockPriceResponse> TopByMarketCap,
+    List<StockPriceResponse> TopByReturn
+);

@@ -23,6 +23,7 @@ public interface IPortfolioService
     Task<PortfolioResponse> UpdateTransactionAsync(string id, string userId, int transactionIndex, TransactionRequest request);
     Task<PortfolioResponse> FixPortfolioTransactionsAsync(string id, string userId);
     Task<StockPriceResponse> GetStockPriceAsync(string id, string userId);
+    Task RecalculateAllXirrAsync(string userId);
     
     // EPF methods
     Task<PortfolioResponse> SetupEpfAsync(string userId, EpfSetupRequest request);
@@ -54,6 +55,8 @@ public interface IMarketDataService
     Task<MfDetailsResponse?> GetMfDetailsAsync(string schemeCode);
     Task<decimal?> GetStockPriceAsync(string tickerSymbol);
     Task<(string? companyName, string? sector, long? marketCap)> GetStockMetadataAsync(string tickerSymbol);
+    Task<List<StockSearchResult>> SearchStocksAsync(string query);
+    Task<List<StockPriceResponse>> GetQuotesAsync(List<string> symbols);
     Task SyncAmfiDataAsync(string url);
     Task<IEnumerable<MutualFundScheme>> SearchSchemesAsync(string query);
 }

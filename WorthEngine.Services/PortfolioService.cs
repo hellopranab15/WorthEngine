@@ -227,52 +227,74 @@ public class PortfolioService : IPortfolioService
         return MapToResponse(portfolio);
     }
 
-    private void RecalculatePortfolioTotals(Portfolio portfolio)
+    private void RecalculatePortfolioTotals(Portfolio portfolio, decimal? overrideCurrentPrice = null)
     {
         // 1. Calculate total units from all transactions
         decimal totalUnits = 0;
-        foreach (var txn in portfolio.Transactions)
+        bool hasUnitTransactions = false;
+
+        if (portfolio.Transactions != null)
         {
-            if (txn.Units.HasValue)
+            foreach (var txn in portfolio.Transactions)
             {
-                if (txn.Type == "DEPOSIT" || txn.Type == "BUY")
-                    totalUnits += txn.Units.Value;
-                else if (txn.Type == "WITHDRAWAL" || txn.Type == "SELL")
-                    totalUnits -= txn.Units.Value;
+                if (txn.Units.HasValue)
+                {
+                    hasUnitTransactions = true;
+                    if (txn.Type == "DEPOSIT" || txn.Type == "BUY")
+                        totalUnits += txn.Units.Value;
+                    else if (txn.Type == "WITHDRAWAL" || txn.Type == "SELL")
+                        totalUnits -= txn.Units.Value;
+                }
             }
         }
-        portfolio.UnitsHeld = totalUnits;
+        
+        // Only update UnitsHeld if we have valid transactions with units
+        if (hasUnitTransactions)
+        {
+            portfolio.UnitsHeld = totalUnits;
+        }
 
         // 2. Calculate total invested amount (buy transactions - sell transactions)
-        var totalBuyAmount = portfolio.Transactions
-            .Where(t => t.Type == "DEPOSIT" || t.Type == "BUY")
-            .Sum(t => t.Amount);
-        
-        var totalSellAmount = portfolio.Transactions
-            .Where(t => t.Type == "WITHDRAWAL" || t.Type == "SELL")
-            .Sum(t => t.Amount);
-
-        var netInvested = totalBuyAmount - totalSellAmount;
-
-        // 3. Calculate average purchase price
-        if (portfolio.UnitsHeld > 0 && netInvested > 0)
+        // Only consider if transactions exist
+        if (portfolio.Transactions != null && portfolio.Transactions.Any())
         {
-            portfolio.PurchasePrice = netInvested / portfolio.UnitsHeld;
+            var totalBuyAmount = portfolio.Transactions
+                .Where(t => t.Type == "DEPOSIT" || t.Type == "BUY")
+                .Sum(t => t.Amount);
+            
+            var totalSellAmount = portfolio.Transactions
+                .Where(t => t.Type == "WITHDRAWAL" || t.Type == "SELL")
+                .Sum(t => t.Amount);
+
+            var netInvested = totalBuyAmount - totalSellAmount;
+
+            // 3. Calculate average purchase price
+            if (portfolio.UnitsHeld > 0 && netInvested > 0)
+            {
+                portfolio.PurchasePrice = netInvested / portfolio.UnitsHeld;
+            }
+            else if (portfolio.UnitsHeld == 0)
+            {
+                portfolio.PurchasePrice = 0;
+            }
         }
-        else if (portfolio.UnitsHeld == 0)
+
+        // 4. Update current value based on override OR latest price
+        if (overrideCurrentPrice.HasValue && portfolio.UnitsHeld > 0)
         {
-            portfolio.PurchasePrice = 0;
+            portfolio.CurrentValue = portfolio.UnitsHeld * overrideCurrentPrice.Value;
         }
-
-        // 4. Update current value based on latest price if available
-        var latestTransaction = portfolio.Transactions
-            .Where(t => t.Price.HasValue)
-            .OrderByDescending(t => t.Date)
-            .FirstOrDefault();
-
-        if (latestTransaction != null && latestTransaction.Price.HasValue && portfolio.UnitsHeld > 0)
+        else if (portfolio.Transactions != null) 
         {
-            portfolio.CurrentValue = portfolio.UnitsHeld * latestTransaction.Price.Value;
+            var latestTransaction = portfolio.Transactions
+                .Where(t => t.Price.HasValue)
+                .OrderByDescending(t => t.Date)
+                .FirstOrDefault();
+
+            if (latestTransaction != null && latestTransaction.Price.HasValue && portfolio.UnitsHeld > 0)
+            {
+                portfolio.CurrentValue = portfolio.UnitsHeld * latestTransaction.Price.Value;
+            }
         }
     }
 
@@ -716,5 +738,58 @@ public class PortfolioService : IPortfolioService
             sector,
             marketCap
         );
+    }
+
+    public async Task RecalculateAllXirrAsync(string userId)
+    {
+        var portfolios = await _portfolioRepository.GetByUserIdAsync(userId);
+
+        foreach (var portfolio in portfolios)
+        {
+            // Only recalculate for stocks and mutual funds
+            if (portfolio.Type != "STOCK" && portfolio.Type != "MF" && portfolio.Type != "SIP")
+                continue;
+
+            try
+            {
+                decimal? livePrice = null;
+
+                // Fetch live price based on type
+                if (portfolio.Type == "STOCK" && !string.IsNullOrEmpty(portfolio.TickerSymbol))
+                {
+                    livePrice = await _marketDataService.GetStockPriceAsync(portfolio.TickerSymbol);
+                }
+                else if ((portfolio.Type == "MF" || portfolio.Type == "SIP") && !string.IsNullOrEmpty(portfolio.SchemeCode))
+                {
+                    livePrice = await _marketDataService.GetMutualFundNavAsync(portfolio.SchemeCode);
+                }
+
+                if (livePrice.HasValue)
+                {
+                    // Update current value with live price
+                    portfolio.CurrentValue = portfolio.UnitsHeld * livePrice.Value;
+
+                    // Recalculate XIRR if transactions exist
+                    if (portfolio.Transactions != null && portfolio.Transactions.Any())
+                    {
+                        RecalculatePortfolioTotals(portfolio, livePrice);
+                    }
+                    else
+                    {
+                         // If no transactions but we have units, just update current value
+                         portfolio.CurrentValue = portfolio.UnitsHeld * livePrice.Value;
+                    }
+
+                    portfolio.LastUpdated = DateTime.UtcNow;
+                    // Use safer UpdateCurrentValueAsync so we don't accidentally overwrite UnitsHeld or other fields
+                    await _portfolioRepository.UpdateCurrentValueAsync(portfolio.Id, portfolio.CurrentValue, portfolio.LastUpdated);
+                }
+            }
+            catch
+            {
+                // Skip this portfolio if price fetch fails
+                continue;
+            }
+        }
     }
 }

@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using WorthEngine.Core.DTOs;
 using WorthEngine.Core.Interfaces;
 using WorthEngine.Core.Models;
+using WorthEngine.Core.Helpers;
 
 namespace WorthEngine.Api.Controllers;
 
@@ -47,6 +48,37 @@ public class MarketDataController : ControllerBase
     {
         var results = await _marketDataService.SearchSchemesAsync(q);
         return Ok(results);
+    }
+
+    [HttpGet("search-stocks")]
+    public async Task<ActionResult<List<StockSearchResult>>> SearchStocks([FromQuery] string query)
+    {
+        if (string.IsNullOrWhiteSpace(query)) return Ok(new List<StockSearchResult>());
+        var results = await _marketDataService.SearchStocksAsync(query);
+        return Ok(results);
+    }
+
+    [HttpGet("movers")]
+    public async Task<ActionResult<MarketMoversResponse>> GetMovers([FromQuery] string market = "IN")
+    {
+        var symbols = market == "US" ? MarketHelper.USDeepMovers : MarketHelper.IndianDeepMovers;
+        
+        // Retrieve batch quotes
+        var allQuotes = await _marketDataService.GetQuotesAsync(symbols);
+
+        // Sort for Top 10 by Market Cap
+        var topByCap = allQuotes
+            .OrderByDescending(x => x.MarketCap ?? 0)
+            .Take(10)
+            .ToList();
+
+        // Sort for Top 10 by Change %
+        var topByReturn = allQuotes
+            .OrderByDescending(x => x.ChangePercent)
+            .Take(10)
+            .ToList();
+
+        return Ok(new MarketMoversResponse(topByCap, topByReturn));
     }
 }
 
