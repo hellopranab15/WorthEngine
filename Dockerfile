@@ -1,5 +1,5 @@
 # Build Stage
-FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:9.0-alpine AS build
 WORKDIR /src
 
 # Copy csproj and restore
@@ -14,17 +14,20 @@ WORKDIR "/src/WorthEngine.Api"
 RUN dotnet publish -c Release -o /app/publish
 
 # Serve Stage
-FROM mcr.microsoft.com/dotnet/aspnet:9.0
+FROM mcr.microsoft.com/dotnet/aspnet:9.0-alpine
 WORKDIR /app
 COPY --from=build /app/publish .
 
 # Render Config
 ENV ASPNETCORE_HTTP_PORTS=8080
 ENV DOTNET_EnableDiagnostics=0
-# Switch to Workstation GC to save memory (Server GC uses too much for 512MB container)
+# Workstation GC is critical for low memory
 ENV DOTNET_gcServer=0
-# Limit GC Heap strictly
-ENV DOTNET_GCHeapHardLimit=128M
+# Disable Globalization to save ~30MB+ RAM (Critical for free tier)
+ENV DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1
+ENV DOTNET_CLI_TELEMETRY_OPTOUT=1
+# Remove explicit heap limit as it was causing Init failures
+# ENV DOTNET_GCHeapHardLimit=128M
 
 EXPOSE 8080
 ENTRYPOINT ["dotnet", "WorthEngine.Api.dll"]
