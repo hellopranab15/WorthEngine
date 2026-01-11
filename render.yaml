@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: worth-engine-api
+    env: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    region: singapore
+    envVars:
+      - key: ASPNETCORE_ENVIRONMENT
+        value: Production
+      - key: MongoDB__DatabaseName
+        value: worthengine
+      - key: ConnectionStrings__MongoDB
+        generateValue: true
+      - key: MarketData__MfApiUrl
+        value: https://api.mfapi.in/mf/{0}
+      - key: MarketData__YahooChartUrl
+        value: https://query1.finance.yahoo.com/v8/finance/chart/{0}?interval=1d&range=1d
+      - key: MarketData__YahooQuoteUrl
+        value: https://query1.finance.yahoo.com/v7/finance/quote?symbols={0}
+      - key: MarketData__YahooSearchUrl
+        value: https://query1.finance.yahoo.com/v1/finance/search?q={0}&quotesCount=10&newsCount=0
