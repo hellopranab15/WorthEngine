@@ -21,8 +21,10 @@ COPY --from=build /app/publish .
 # Render Config
 ENV ASPNETCORE_HTTP_PORTS=8080
 ENV DOTNET_EnableDiagnostics=0
-# Limit GC Heap to avoid OOM on free tier (512MB RAM available)
-ENV DOTNET_GCHeapHardLimit=300M
+# Switch to Workstation GC to save memory (Server GC uses too much for 512MB container)
+ENV DOTNET_gcServer=0
+# Limit GC Heap strictly
+ENV DOTNET_GCHeapHardLimit=128M
 
 EXPOSE 8080
 ENTRYPOINT ["dotnet", "WorthEngine.Api.dll"]
