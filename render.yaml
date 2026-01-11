@@ -13,7 +13,7 @@ services:
       - key: MongoDB__DatabaseName
         value: worthengine
       - key: ConnectionStrings__MongoDB
-        generateValue: true
+        sync: false
       - key: MarketData__MfApiUrl
         value: https://api.mfapi.in/mf/{0}
       - key: MarketData__YahooChartUrl
