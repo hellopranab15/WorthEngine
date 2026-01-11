@@ -3,6 +3,7 @@ using System.Text.Json;
 using WorthEngine.Core.DTOs;
 using WorthEngine.Core.Interfaces;
 using WorthEngine.Core.Models;
+using Microsoft.Extensions.Configuration;
 
 namespace WorthEngine.Services;
 
@@ -15,11 +16,13 @@ public class MarketDataService : IMarketDataService
 {
     private readonly HttpClient _httpClient;
     private readonly IMutualFundRepository _mutualFundRepository;
+    private readonly IConfiguration _configuration;
 
-    public MarketDataService(HttpClient httpClient, IMutualFundRepository mutualFundRepository)
+    public MarketDataService(HttpClient httpClient, IMutualFundRepository mutualFundRepository, IConfiguration configuration)
     {
         _httpClient = httpClient;
         _mutualFundRepository = mutualFundRepository;
+        _configuration = configuration;
     }
 
     /// <summary>
@@ -55,7 +58,11 @@ public class MarketDataService : IMarketDataService
                  // but Search uses local DB.
             }
 
-            var response = await _httpClient.GetAsync($"https://api.mfapi.in/mf/{schemeCode}");
+
+            // Use config or default
+            var baseUrl = _configuration["MarketData:MfApiUrl"] ?? "https://api.mfapi.in/mf/{0}";
+            var url = string.Format(baseUrl, schemeCode);
+            var response = await _httpClient.GetAsync(url);
             
             if (!response.IsSuccessStatusCode)
                 return null;
@@ -99,7 +106,8 @@ public class MarketDataService : IMarketDataService
         try
         {
             // Yahoo Finance chart API
-            var url = $"https://query1.finance.yahoo.com/v8/finance/chart/{tickerSymbol}?interval=1d&range=1d";
+            var baseUrl = _configuration["MarketData:YahooChartUrl"] ?? "https://query1.finance.yahoo.com/v8/finance/chart/{0}?interval=1d&range=1d";
+            var url = string.Format(baseUrl, tickerSymbol);
             
             _httpClient.DefaultRequestHeaders.Clear();
             _httpClient.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0");
@@ -141,7 +149,8 @@ public class MarketDataService : IMarketDataService
         try
         {
             // Yahoo Finance quote API
-            var url = $"https://query1.finance.yahoo.com/v7/finance/quote?symbols={tickerSymbol}";
+            var baseUrl = _configuration["MarketData:YahooQuoteUrl"] ?? "https://query1.finance.yahoo.com/v7/finance/quote?symbols={0}";
+            var url = string.Format(baseUrl, tickerSymbol);
             
             _httpClient.DefaultRequestHeaders.Clear();
             _httpClient.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0");
@@ -188,7 +197,8 @@ public class MarketDataService : IMarketDataService
         try
         {
             // Yahoo Finance Search API
-            var url = $"https://query1.finance.yahoo.com/v1/finance/search?q={Uri.EscapeDataString(query)}&quotesCount=10&newsCount=0";
+            var baseUrl = _configuration["MarketData:YahooSearchUrl"] ?? "https://query1.finance.yahoo.com/v1/finance/search?q={0}&quotesCount=10&newsCount=0";
+            var url = string.Format(baseUrl, Uri.EscapeDataString(query));
             
             _httpClient.DefaultRequestHeaders.Clear();
             _httpClient.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0");
@@ -233,7 +243,9 @@ public class MarketDataService : IMarketDataService
             {
                 var batch = symbols.Skip(i).Take(10);
                 var symbolStr = string.Join(",", batch);
-                var url = $"https://query1.finance.yahoo.com/v7/finance/quote?symbols={symbolStr}";
+                
+                var baseUrl = _configuration["MarketData:YahooQuoteUrl"] ?? "https://query1.finance.yahoo.com/v7/finance/quote?symbols={0}";
+                var url = string.Format(baseUrl, symbolStr);
 
                 _httpClient.DefaultRequestHeaders.Clear();
                 _httpClient.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0");
