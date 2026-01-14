@@ -27,15 +27,16 @@ public class XirrService : IXirrService
 
         foreach (var txn in transactions.OrderBy(t => t.Date))
         {
-            double amount = txn.Type == "DEPOSIT" 
+            // Handle both MF (DEPOSIT/WITHDRAWAL) and Stock (BUY/SELL) transaction types
+            double amount = (txn.Type == "DEPOSIT" || txn.Type == "BUY")
                 ? -(double)txn.Amount  // Money going out (investment)
-                : (double)txn.Amount;   // Money coming in (withdrawal)
+                : (double)txn.Amount;   // Money coming in (withdrawal/sell)
             
             cashFlows.Add((txn.Date, amount));
             
-            if (txn.Type == "DEPOSIT")
+            if (txn.Type == "DEPOSIT" || txn.Type == "BUY")
                 totalInvested += txn.Amount;
-            else
+            else if (txn.Type == "WITHDRAWAL" || txn.Type == "SELL")
                 totalInvested -= txn.Amount;
         }
 

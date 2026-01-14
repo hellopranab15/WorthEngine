@@ -17,7 +17,8 @@ public record DashboardSummary(
     decimal? StockXirr,
     decimal? MfXirr,
     decimal TotalStockValue,
-    decimal TotalMfValue
+    decimal TotalMfValue,
+    decimal TotalEpfValue
 );
 
 public record AssetAllocation(string Type, decimal Value, decimal Percentage);

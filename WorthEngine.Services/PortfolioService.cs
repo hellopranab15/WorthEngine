@@ -20,7 +20,79 @@ public class PortfolioService : IPortfolioService
     public async Task<IEnumerable<PortfolioResponse>> GetUserPortfoliosAsync(string userId)
     {
         var portfolios = await _portfolioRepository.GetByUserIdAsync(userId);
-        return portfolios.Select(MapToResponse);
+        var responses = new List<PortfolioResponse>();
+
+        foreach (var portfolio in portfolios)
+        {
+            // For stocks and mutual funds, fetch live prices
+            if ((portfolio.Type == "STOCK" && !string.IsNullOrEmpty(portfolio.TickerSymbol)) ||
+                ((portfolio.Type == "MF" || portfolio.Type == "SIP") && !string.IsNullOrEmpty(portfolio.SchemeCode)))
+            {
+                try
+                {
+                    decimal? livePrice = null;
+
+                    // Fetch live price based on type
+                    if (portfolio.Type == "STOCK")
+                    {
+                        livePrice = await _marketDataService.GetStockPriceAsync(portfolio.TickerSymbol!);
+                    }
+                    else if (portfolio.Type == "MF" || portfolio.Type == "SIP")
+                    {
+                        livePrice = await _marketDataService.GetMutualFundNavAsync(portfolio.SchemeCode!);
+                    }
+
+                    if (livePrice.HasValue && portfolio.UnitsHeld > 0)
+                    {
+                        // Calculate current value with live price
+                        var newCurrentValue = portfolio.UnitsHeld * livePrice.Value;
+
+                        // Recalculate XIRR and gains with live data
+                        decimal xirrValue = 0;
+                        decimal gain = 0;
+                        decimal gainPercentage = 0;
+
+                        if (portfolio.Transactions != null && portfolio.Transactions.Any())
+                        {
+                            var xirrResult = _xirrService.CalculateXirr(portfolio.Transactions.ToList(), newCurrentValue);
+                            xirrValue = xirrResult.Xirr;
+                            gain = xirrResult.CurrentValue - xirrResult.InvestedAmount;
+                            gainPercentage = xirrResult.InvestedAmount > 0
+                                ? (gain / xirrResult.InvestedAmount) * 100
+                                : 0;
+                        }
+
+                        // Return response with live calculated values (don't update DB)
+                        responses.Add(new PortfolioResponse(
+                            portfolio.Id,
+                            portfolio.Type,
+                            portfolio.ProviderName,
+                            portfolio.SchemeCode,
+                            portfolio.TickerSymbol,
+                            portfolio.SipStartDate,
+                            portfolio.SipDeductionDay,
+                            portfolio.UnitsHeld,
+                            newCurrentValue,
+                            portfolio.PurchasePrice,
+                            gain,
+                            gainPercentage,
+                            xirrValue,
+                            portfolio.LastUpdated
+                        ));
+                        continue;
+                    }
+                }
+                catch
+                {
+                    // If live price fetch fails, fall through to use stored values
+                }
+            }
+
+            // For other types or if live price fetch failed, use stored values
+            responses.Add(MapToResponse(portfolio));
+        }
+
+        return responses;
     }
 
     public async Task<PortfolioResponse?> GetPortfolioAsync(string id, string userId)
@@ -29,7 +101,7 @@ public class PortfolioService : IPortfolioService
         if (portfolio == null || portfolio.UserId != userId)
             return null;
 
-        // For stocks, update current value with live price and recalculate XIRR
+        // For stocks and mutual funds, update current value with live price and recalculate XIRR
         if (portfolio.Type == "STOCK" && !string.IsNullOrEmpty(portfolio.TickerSymbol))
         {
             try
@@ -79,8 +151,57 @@ public class PortfolioService : IPortfolioService
                 // If live price fetch fails, use stored values
             }
         }
+        else if ((portfolio.Type == "MF" || portfolio.Type == "SIP") && !string.IsNullOrEmpty(portfolio.SchemeCode))
+        {
+            try
+            {
+                var liveNav = await _marketDataService.GetMutualFundNavAsync(portfolio.SchemeCode);
+                if (liveNav.HasValue)
+                {
+                    // Update current value with live NAV
+                    var newCurrentValue = portfolio.UnitsHeld * liveNav.Value;
+                    
+                    // Recalculate XIRR with live current value
+                    decimal xirrValue = 0;
+                    decimal gain = 0;
+                    decimal gainPercentage = 0;
+                    
+                    if (portfolio.Transactions != null && portfolio.Transactions.Any())
+                    {
+                        var xirrResult = _xirrService.CalculateXirr(portfolio.Transactions.ToList(), newCurrentValue);
+                        xirrValue = xirrResult.Xirr;
+                        gain = xirrResult.CurrentValue - xirrResult.InvestedAmount;
+                        gainPercentage = xirrResult.InvestedAmount > 0 
+                            ? (gain / xirrResult.InvestedAmount) * 100 
+                            : 0;
+                    }
+                    
+                    // Return response with recalculated values
+                    return new PortfolioResponse(
+                        portfolio.Id,
+                        portfolio.Type,
+                        portfolio.ProviderName,
+                        portfolio.SchemeCode,
+                        portfolio.TickerSymbol,
+                        portfolio.SipStartDate,
+                        portfolio.SipDeductionDay,
+                        portfolio.UnitsHeld,
+                        newCurrentValue,
+                        portfolio.PurchasePrice,
+                        gain,
+                        gainPercentage,
+                        xirrValue,
+                        portfolio.LastUpdated
+                    );
+                }
+            }
+            catch
+            {
+                // If live NAV fetch fails, use stored values
+            }
+        }
 
-        // For non-stocks or if live price fetch failed, calculate from stored values
+        // For non-stocks/MF or if live price fetch failed, calculate from stored values
         decimal fallbackGain = 0;
         decimal fallbackGainPercentage = 0;
         decimal fallbackXirr = 0;
@@ -218,8 +339,33 @@ public class PortfolioService : IPortfolioService
 
         portfolio.Transactions.Add(transaction);
 
-        // Recalculate portfolio totals from ALL transactions
-        RecalculatePortfolioTotals(portfolio);
+        // Fetch live price/NAV to calculate current value
+        decimal? currentPrice = null;
+        if (portfolio.Type == "STOCK" && !string.IsNullOrEmpty(portfolio.TickerSymbol))
+        {
+            try
+            {
+                currentPrice = await _marketDataService.GetStockPriceAsync(portfolio.TickerSymbol);
+            }
+            catch
+            {
+                // If live price fetch fails, fall back to latest transaction price
+            }
+        }
+        else if ((portfolio.Type == "MF" || portfolio.Type == "SIP") && !string.IsNullOrEmpty(portfolio.SchemeCode))
+        {
+            try
+            {
+                currentPrice = await _marketDataService.GetMutualFundNavAsync(portfolio.SchemeCode);
+            }
+            catch
+            {
+                // If live NAV fetch fails, fall back to latest transaction NAV
+            }
+        }
+
+        // Recalculate portfolio totals with current price/NAV
+        RecalculatePortfolioTotals(portfolio, currentPrice);
         
         portfolio.LastUpdated = DateTime.UtcNow;
 
@@ -338,12 +484,17 @@ public class PortfolioService : IPortfolioService
         if (portfolio == null || portfolio.UserId != userId)
             throw new Exception("Portfolio not found");
 
-        // For stocks, fetch live price; for others use calculated NAV
+        // For stocks and mutual funds, fetch live price/NAV; for others use calculated NAV
         decimal currentNav = 0;
         if (portfolio.Type == "STOCK" && !string.IsNullOrEmpty(portfolio.TickerSymbol))
         {
             var livePrice = await _marketDataService.GetStockPriceAsync(portfolio.TickerSymbol);
             currentNav = livePrice ?? (portfolio.UnitsHeld > 0 ? portfolio.CurrentValue / portfolio.UnitsHeld : 0);
+        }
+        else if ((portfolio.Type == "MF" || portfolio.Type == "SIP") && !string.IsNullOrEmpty(portfolio.SchemeCode))
+        {
+            var liveNav = await _marketDataService.GetMutualFundNavAsync(portfolio.SchemeCode);
+            currentNav = liveNav ?? (portfolio.UnitsHeld > 0 ? portfolio.CurrentValue / portfolio.UnitsHeld : 0);
         }
         else
         {
@@ -440,8 +591,33 @@ public class PortfolioService : IPortfolioService
         portfolio.Transactions[transactionIndex].Units = request.Units;
         portfolio.Transactions[transactionIndex].Price = request.Price;
 
-        // Recalculate portfolio totals from ALL transactions
-        RecalculatePortfolioTotals(portfolio);
+        // Fetch live price/NAV to calculate current value
+        decimal? currentPrice = null;
+        if (portfolio.Type == "STOCK" && !string.IsNullOrEmpty(portfolio.TickerSymbol))
+        {
+            try
+            {
+                currentPrice = await _marketDataService.GetStockPriceAsync(portfolio.TickerSymbol);
+            }
+            catch
+            {
+                // If live price fetch fails, fall back to latest transaction price
+            }
+        }
+        else if ((portfolio.Type == "MF" || portfolio.Type == "SIP") && !string.IsNullOrEmpty(portfolio.SchemeCode))
+        {
+            try
+            {
+                currentPrice = await _marketDataService.GetMutualFundNavAsync(portfolio.SchemeCode);
+            }
+            catch
+            {
+                // If live NAV fetch fails, fall back to latest transaction NAV
+            }
+        }
+
+        // Recalculate portfolio totals with current price/NAV
+        RecalculatePortfolioTotals(portfolio, currentPrice);
 
         portfolio.LastUpdated = DateTime.UtcNow;
 

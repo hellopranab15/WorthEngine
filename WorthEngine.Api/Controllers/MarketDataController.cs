@@ -51,10 +51,29 @@ public class MarketDataController : ControllerBase
     }
 
     [HttpGet("search-stocks")]
-    public async Task<ActionResult<List<StockSearchResult>>> SearchStocks([FromQuery] string query)
+    public async Task<ActionResult<List<StockSearchResult>>> SearchStocks([FromQuery] string query, [FromQuery] string market = "IN")
     {
         if (string.IsNullOrWhiteSpace(query)) return Ok(new List<StockSearchResult>());
         var results = await _marketDataService.SearchStocksAsync(query);
+        
+        // Filter by market
+        if (market == "IN")
+        {
+            // Indian exchanges: NSI (NSE), BSE, NSE
+            results = results.Where(r => 
+                r.Symbol.EndsWith(".NS") || r.Symbol.EndsWith(".BO") ||
+                r.Exchange == "NSI" || r.Exchange == "BSE" || r.Exchange == "NSE"
+            ).ToList();
+        }
+        else if (market == "US")
+        {
+            // US exchanges: NYSE, NASDAQ, AMEX
+            results = results.Where(r => 
+                r.Exchange == "NYQ" || r.Exchange == "NMS" || r.Exchange == "NGM" || 
+                r.Exchange == "NYSE" || r.Exchange == "NASDAQ"
+            ).ToList();
+        }
+        
         return Ok(results);
     }
 

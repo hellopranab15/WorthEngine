@@ -25,9 +25,36 @@ public class DashboardService : IDashboardService
         decimal totalNetWorth = portfolios.Sum(p => p.CurrentValue);
 
         // Calculate total invested
-        decimal totalInvested = portfolios.Sum(p =>
-            p.Transactions.Where(t => t.Type == "DEPOSIT" || t.Type == "BUY").Sum(t => t.Amount) -
-            p.Transactions.Where(t => t.Type == "WITHDRAWAL" || t.Type == "SELL").Sum(t => t.Amount));
+        decimal totalInvested = 0;
+        
+        foreach (var portfolio in portfolios)
+        {
+            if (portfolio.Type == "EPF")
+            {
+                // For EPF, invested amount = opening balances + all contributions
+                var epfInvested = (portfolio.OpeningEmployeeBalance ?? 0) + 
+                                  (portfolio.OpeningEmployerBalance ?? 0);
+                
+                if (portfolio.EpfContributions != null)
+                {
+                    epfInvested += portfolio.EpfContributions.Sum(c => c.EmployeeShare + c.EmployerShare);
+                }
+                
+                totalInvested += epfInvested;
+            }
+            else
+            {
+                // For other types, use transactions
+                var deposits = portfolio.Transactions
+                    .Where(t => t.Type == "DEPOSIT" || t.Type == "BUY")
+                    .Sum(t => t.Amount);
+                var withdrawals = portfolio.Transactions
+                    .Where(t => t.Type == "WITHDRAWAL" || t.Type == "SELL")
+                    .Sum(t => t.Amount);
+                    
+                totalInvested += (deposits - withdrawals);
+            }
+        }
 
         decimal totalGain = totalNetWorth - totalInvested;
         decimal gainPercentage = totalInvested > 0 ? (totalGain / totalInvested) * 100 : 0;
@@ -69,6 +96,10 @@ public class DashboardService : IDashboardService
                 catch { /* Ignore calculation errors */ }
             }
         }
+
+        // Calculate EPF totals
+        var epfPortfolios = portfolios.Where(p => p.Type == "EPF").ToList();
+        decimal totalEpfValue = epfPortfolios.Sum(p => p.CurrentValue);
 
         // Calculate Overall XIRR (Stock + MF only, excluding EPF, NPS, SAVING)
         decimal? overallXirr = null;
@@ -121,7 +152,8 @@ public class DashboardService : IDashboardService
             StockXirr: stockXirr,
             MfXirr: mfXirr,
             TotalStockValue: totalStockValue,
-            TotalMfValue: totalMfValue
+            TotalMfValue: totalMfValue,
+            TotalEpfValue: totalEpfValue
         );
     }
 }
