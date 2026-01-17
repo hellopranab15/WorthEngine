@@ -169,3 +169,85 @@ public record MarketMoversResponse(
     List<StockPriceResponse> TopByMarketCap,
     List<StockPriceResponse> TopByReturn
 );
+
+// FIRE Calculator DTOs
+public record FireCalculationRequest(
+    decimal CurrentNetWorth,
+    int CurrentAge,
+    decimal MonthlyExpenses,
+    decimal? TargetAmount,
+    int? TargetAge,
+    decimal MonthlyInvestment,
+    decimal ExpectedAnnualReturn,
+    decimal WithdrawalRate
+);
+
+public record FireProjection(
+    int Year,
+    int Age,
+    decimal ProjectedWealth,
+    decimal AnnualInvestment,
+    decimal InvestmentGrowth
+);
+
+public record FireCalculationResponse(
+    decimal CurrentNetWorth,
+    decimal TargetAmount,
+    decimal ProgressPercentage,
+    int YearsToFire,
+    int FireAge,
+    decimal MonthlyPassiveIncome,
+    decimal AnnualExpenses,
+    List<FireProjection> Projections
+);
+
+// FIRE Goal DTOs (for goal tracking)
+public record FireGoalRequest(
+    decimal TargetAmount,
+    int TargetYear,
+    int? TargetAge,
+    decimal ExpectedAnnualReturn,
+    decimal ConservativeReturn,
+    decimal AggressiveReturn,
+    decimal InflationRate,
+    decimal WithdrawalRate,
+    decimal MonthlyExpenses
+);
+
+public record FireGoalResponse(
+    string Id,
+    decimal TargetAmount,
+    int TargetYear,
+    int? TargetAge,
+    decimal ExpectedAnnualReturn,
+    decimal ConservativeReturn,
+    decimal AggressiveReturn,
+    decimal InflationRate,
+    decimal WithdrawalRate,
+    decimal MonthlyExpenses,
+    bool IsActive,
+    DateTime CreatedAt,
+    DateTime UpdatedAt
+);
+
+public record FireProgressResponse(
+    decimal CurrentNetWorth,
+    decimal TargetAmount,
+    decimal ProgressPercentage,
+    int YearsRemaining,
+    decimal RequiredAdditionalSip,
+    decimal CurrentMonthlySip,
+    decimal TotalMonthlySipNeeded,
+    decimal GapAmount,
+    int TargetYear,
+    int ProjectedFireAge,
+    bool OnTrack
+);
+
+public record FireScenarioResponse(
+    string ScenarioName,
+    decimal ReturnRate,
+    decimal RequiredSip,
+    decimal ProjectedAmount,
+    int YearsToGoal
+);
