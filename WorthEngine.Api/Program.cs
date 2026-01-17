@@ -44,6 +44,7 @@ builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<IPortfolioRepository, PortfolioRepository>();
 builder.Services.AddScoped<IInsuranceRepository, InsuranceRepository>();
 builder.Services.AddScoped<IMutualFundRepository, MutualFundRepository>();
+builder.Services.AddScoped<IFireGoalRepository, FireGoalRepository>();
 
 // Services
 builder.Services.AddScoped<IAuthService, AuthService>();
@@ -51,6 +52,8 @@ builder.Services.AddScoped<IPortfolioService, PortfolioService>();
 builder.Services.AddScoped<IInsuranceService, InsuranceService>();
 builder.Services.AddScoped<IDashboardService, DashboardService>();
 builder.Services.AddScoped<IXirrService, XirrService>();
+builder.Services.AddScoped<FireCalculatorService>();
+builder.Services.AddScoped<FireGoalService>();
 
 // HTTP Client for Market Data Service
 builder.Services.AddHttpClient<IMarketDataService, MarketDataService>();
