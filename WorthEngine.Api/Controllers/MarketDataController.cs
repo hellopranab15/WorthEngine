@@ -99,6 +99,20 @@ public class MarketDataController : ControllerBase
 
         return Ok(new MarketMoversResponse(topByCap, topByReturn));
     }
+
+    [HttpGet("quote/{symbol}")]
+    public async Task<ActionResult<StockPriceResponse>> GetQuote(string symbol)
+    {
+        if (string.IsNullOrWhiteSpace(symbol))
+            return BadRequest("Symbol is required");
+
+        var quotes = await _marketDataService.GetQuotesAsync(new List<string> { symbol });
+        var quote = quotes.FirstOrDefault();
+        if (quote == null)
+            return NotFound($"No quote found for {symbol}");
+
+        return Ok(quote);
+    }
 }
 
 public class SyncRequest

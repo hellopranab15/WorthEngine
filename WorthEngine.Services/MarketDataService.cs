@@ -265,34 +265,35 @@ public class MarketDataService : IMarketDataService
                         var changeP = q.TryGetProperty("regularMarketChangePercent", out var rcp) ? rcp.GetDecimal() : 0;
                         var mCap = q.TryGetProperty("marketCap", out var cap) ? cap.GetInt64() : (long?)null;
                         var name = q.TryGetProperty("shortName", out var sn) ? sn.GetString() : "";
-                        var fiftyTwoWeekLow = q.TryGetProperty("fiftyTwoWeekLow", out var ftwl) ? ftwl.GetDecimal() : 0;
-                        
-                        // Calculate 52 week return roughly as (Current - Low) / Low * 100
-                        // Since Yahoo quote doesn't explicitly give "52WeekReturn" field universally, 
-                        // we can use "52WeekChange" if available, else derive it.
-                        // Ideally "fiftyTwoWeekChange" is provided by Yahoo.
-                        var fiftyTwoWeekChange = q.TryGetProperty("fiftyTwoWeekChange", out var ftwc) ? ftwc.GetDecimal() : 0;
+                        var sector = q.TryGetProperty("sector", out var sec) ? sec.GetString() : null;
 
-                        // Create StockPriceResponse (reusing the existing DTO, adding fields as strictly needed or mapping to existing)
-                        // Note: Our existing StockPriceResponse is a bit simple. 
-                        // Let's just Map it:
-                        // ChangePercent -> Daily Change
-                        // marketCap -> Market Cap
-                        
+                        // Extended fields
+                        var ftwh = q.TryGetProperty("fiftyTwoWeekHigh", out var h52) ? h52.GetDecimal() : (decimal?)null;
+                        var ftwl = q.TryGetProperty("fiftyTwoWeekLow", out var l52) ? l52.GetDecimal() : (decimal?)null;
+                        var open = q.TryGetProperty("regularMarketOpen", out var rmo) ? rmo.GetDecimal() : (decimal?)null;
+                        var dayHigh = q.TryGetProperty("regularMarketDayHigh", out var rdh) ? rdh.GetDecimal() : (decimal?)null;
+                        var dayLow = q.TryGetProperty("regularMarketDayLow", out var rdl) ? rdl.GetDecimal() : (decimal?)null;
+                        var vol = q.TryGetProperty("regularMarketVolume", out var rmv) ? rmv.GetInt64() : (long?)null;
+                        var prevClose = q.TryGetProperty("regularMarketPreviousClose", out var rpc) ? rpc.GetDecimal() : (decimal?)null;
+
                         results.Add(new StockPriceResponse(
                             symbol,
                             price,
-                            0, // Current Value (not relevant here)
+                            0, // Current Value (not relevant for market data)
                             changeP, 
                             DateTime.UtcNow,
                             name,
-                            "Technology", // Placeholder sector, we could fetch it but keeping simple
+                            sector,
                             mCap
-                        ) { 
-                            // We can abuse "Sector" to return 52 Week Return if we don't want to change DTO too much,
-                            // OR we can rely on frontend calculating it if we had 52w low.
-                            // Let's just use the ChangePercent for daily ranking for now, 
-                            // OR better, we update the DTO to hold 52WeekChange in next step.
+                        )
+                        {
+                            FiftyTwoWeekHigh = ftwh,
+                            FiftyTwoWeekLow = ftwl,
+                            RegularMarketOpen = open,
+                            RegularMarketDayHigh = dayHigh,
+                            RegularMarketDayLow = dayLow,
+                            RegularMarketVolume = vol,
+                            RegularMarketPreviousClose = prevClose
                         });
                     }
                 }
