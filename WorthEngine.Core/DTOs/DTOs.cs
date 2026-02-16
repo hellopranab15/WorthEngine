@@ -155,7 +155,16 @@ public record StockPriceResponse(
     string? CompanyName,
     string? Sector,
     long? MarketCap
-);
+)
+{
+    public decimal? FiftyTwoWeekHigh { get; init; }
+    public decimal? FiftyTwoWeekLow { get; init; }
+    public decimal? RegularMarketOpen { get; init; }
+    public decimal? RegularMarketDayHigh { get; init; }
+    public decimal? RegularMarketDayLow { get; init; }
+    public long? RegularMarketVolume { get; init; }
+    public decimal? RegularMarketPreviousClose { get; init; }
+};
 
 public record StockSearchResult(
     string Symbol,
