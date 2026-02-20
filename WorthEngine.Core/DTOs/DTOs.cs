@@ -39,7 +39,7 @@ public record PortfolioRequest(
 
 public record TransactionRequest(DateTime Date, decimal Amount, string Type, decimal? Units = null, decimal? Price = null, DateTime? InvestmentDate = null);
 
-public record MfDetailsResponse(string SchemeCode, string SchemeName, decimal CurrentNav, DateTime Date);
+public record MfDetailsResponse(string SchemeCode, string SchemeName, decimal CurrentNav, DateTime Date, decimal? PreviousNav = null);
 
 public record TransactionDetailResponse(
     DateTime Date,
