@@ -767,6 +767,52 @@ public class PortfolioService : IPortfolioService
         if (portfolio == null || portfolio.UserId != userId)
             throw new UnauthorizedAccessException("Portfolio not found or access denied");
 
+        // Auto-extend contributions to current month if behind
+        if (portfolio.EpfContributions != null && portfolio.EpfContributions.Any())
+        {
+            var lastContribution = portfolio.EpfContributions.Max(c => c.Month);
+            var currentMonth = new DateTime(DateTime.Now.Year, DateTime.Now.Month, 1);
+            
+            if (lastContribution < currentMonth)
+            {
+                var nextMonth = lastContribution.AddMonths(1);
+                while (nextMonth <= currentMonth)
+                {
+                    decimal employeeShare = portfolio.EpfBasicPay!.Value * 0.12m;
+                    decimal epsContribution = 0;
+                    decimal employerShare = 0;
+                    decimal epsWage = 0;
+
+                    if (portfolio.IsEpsMember!.Value)
+                    {
+                        epsWage = Math.Min(portfolio.EpfBasicPay.Value, 15000);
+                        epsContribution = Math.Min(epsWage * 0.0833m, 1250);
+                        employerShare = (portfolio.EpfBasicPay.Value * 0.12m) - epsContribution;
+                    }
+                    else
+                    {
+                        employerShare = portfolio.EpfBasicPay.Value * 0.12m;
+                    }
+
+                    portfolio.EpfContributions.Add(new EpfContribution
+                    {
+                        Month = nextMonth,
+                        EpfWage = portfolio.EpfBasicPay.Value,
+                        EmployeeShare = employeeShare,
+                        EmployerShare = employerShare,
+                        EpsWage = epsWage
+                    });
+
+                    nextMonth = nextMonth.AddMonths(1);
+                }
+
+                // Recalculate current value with new contributions
+                CalculateEpfCurrentValue(portfolio);
+                portfolio.LastUpdated = DateTime.UtcNow;
+                await _portfolioRepository.UpdateAsync(portfolio);
+            }
+        }
+
         var totalEmployeeContribution = portfolio.EpfContributions!.Sum(c => c.EmployeeShare);
         var totalEmployerContribution = portfolio.EpfContributions.Sum(c => c.EmployerShare);
 

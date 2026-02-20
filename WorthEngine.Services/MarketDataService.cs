@@ -18,11 +18,49 @@ public class MarketDataService : IMarketDataService
     private readonly IMutualFundRepository _mutualFundRepository;
     private readonly IConfiguration _configuration;
 
+    private static readonly System.Net.CookieContainer _yahooCookies = new System.Net.CookieContainer();
+    private static readonly HttpClient _yahooClient = new HttpClient(new HttpClientHandler { CookieContainer = _yahooCookies }) 
+    { 
+        Timeout = TimeSpan.FromSeconds(10) 
+    };
+    private static string? _yahooCrumb = null;
+    private static readonly SemaphoreSlim _crumbLock = new SemaphoreSlim(1, 1);
+
     public MarketDataService(HttpClient httpClient, IMutualFundRepository mutualFundRepository, IConfiguration configuration)
     {
         _httpClient = httpClient;
         _mutualFundRepository = mutualFundRepository;
         _configuration = configuration;
+    }
+
+    private async Task<string?> GetYahooCrumbAsync()
+    {
+        if (_yahooCrumb != null) return _yahooCrumb;
+
+        await _crumbLock.WaitAsync();
+        try
+        {
+            if (_yahooCrumb != null) return _yahooCrumb; // double-check
+
+            _yahooClient.DefaultRequestHeaders.Clear();
+            _yahooClient.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
+
+            // 1. Get Cookie
+            try { await _yahooClient.GetAsync("https://fc.yahoo.com"); } catch { }
+
+            // 2. Get Crumb
+            var crumbResponse = await _yahooClient.GetAsync("https://query1.finance.yahoo.com/v1/test/getcrumb");
+            if (crumbResponse.IsSuccessStatusCode)
+            {
+                _yahooCrumb = await crumbResponse.Content.ReadAsStringAsync();
+            }
+        }
+        finally
+        {
+            _crumbLock.Release();
+        }
+
+        return _yahooCrumb;
     }
 
     /// <summary>
@@ -148,40 +186,48 @@ public class MarketDataService : IMarketDataService
 
         try
         {
+            var crumb = await GetYahooCrumbAsync();
+            var crumbParam = string.IsNullOrEmpty(crumb) ? "" : $"&crumb={crumb}";
+
             // Yahoo Finance quote API
             var baseUrl = _configuration["MarketData:YahooQuoteUrl"] ?? "https://query1.finance.yahoo.com/v7/finance/quote?symbols={0}";
-            var url = string.Format(baseUrl, tickerSymbol);
+            var url = string.Format(baseUrl, tickerSymbol) + crumbParam;
             
-            _httpClient.DefaultRequestHeaders.Clear();
-            _httpClient.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0");
+            _yahooClient.DefaultRequestHeaders.Clear();
+            _yahooClient.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
 
-            var response = await _httpClient.GetAsync(url);
+            var response = await _yahooClient.GetAsync(url);
             
             if (!response.IsSuccessStatusCode)
+            {
+                // Reset crumb on unauthorized in case it expired
+                if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized) _yahooCrumb = null;
                 return (null, null, null);
+            }
 
             var content = await response.Content.ReadAsStringAsync();
             var json = JsonDocument.Parse(content);
             
-            var quoteResponse = json.RootElement
-                .GetProperty("quoteResponse")
-                .GetProperty("result")[0];
+            if (json.RootElement.GetProperty("quoteResponse").TryGetProperty("result", out var results) && results.GetArrayLength() > 0)
+            {
+                var quoteResponse = results[0];
 
-            string? companyName = quoteResponse.TryGetProperty("longName", out var nameElement) 
-                ? nameElement.GetString() 
-                : quoteResponse.TryGetProperty("shortName", out var shortNameElement)
-                    ? shortNameElement.GetString()
+                string? companyName = quoteResponse.TryGetProperty("longName", out var nameElement) 
+                    ? nameElement.GetString() 
+                    : quoteResponse.TryGetProperty("shortName", out var shortNameElement)
+                        ? shortNameElement.GetString()
+                        : null;
+
+                string? sector = quoteResponse.TryGetProperty("sector", out var sectorElement) 
+                    ? sectorElement.GetString() 
                     : null;
 
-            string? sector = quoteResponse.TryGetProperty("sector", out var sectorElement) 
-                ? sectorElement.GetString() 
-                : null;
+                long? marketCap = quoteResponse.TryGetProperty("marketCap", out var capElement) 
+                    ? capElement.GetInt64() 
+                    : null;
 
-            long? marketCap = quoteResponse.TryGetProperty("marketCap", out var capElement) 
-                ? capElement.GetInt64() 
-                : null;
-
-            return (companyName, sector, marketCap);
+                return (companyName, sector, marketCap);
+            }
         }
         catch (Exception)
         {
@@ -238,6 +284,9 @@ public class MarketDataService : IMarketDataService
 
         try
         {
+            var crumb = await GetYahooCrumbAsync();
+            var crumbParam = string.IsNullOrEmpty(crumb) ? "" : $"&crumb={crumb}";
+
             // Fetch in batches of 10 to be safe
             for (int i = 0; i < symbols.Count; i += 10)
             {
@@ -245,13 +294,19 @@ public class MarketDataService : IMarketDataService
                 var symbolStr = string.Join(",", batch);
                 
                 var baseUrl = _configuration["MarketData:YahooQuoteUrl"] ?? "https://query1.finance.yahoo.com/v7/finance/quote?symbols={0}";
-                var url = string.Format(baseUrl, symbolStr);
+                var url = string.Format(baseUrl, symbolStr) + crumbParam;
 
-                _httpClient.DefaultRequestHeaders.Clear();
-                _httpClient.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0");
+                _yahooClient.DefaultRequestHeaders.Clear();
+                _yahooClient.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
 
-                var response = await _httpClient.GetAsync(url);
-                if (!response.IsSuccessStatusCode) continue;
+                var response = await _yahooClient.GetAsync(url);
+                
+                if (!response.IsSuccessStatusCode)
+                {
+                    // Reset crumb on unauthorized in case it expired
+                    if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized) _yahooCrumb = null;
+                    continue;
+                }
 
                 var content = await response.Content.ReadAsStringAsync();
                 var json = JsonDocument.Parse(content);
