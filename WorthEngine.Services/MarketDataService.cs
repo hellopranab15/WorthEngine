@@ -401,10 +401,18 @@ public class MarketDataService : IMarketDataService
                                 var data = prop.Value;
                                 if (data.ValueKind != JsonValueKind.Object) continue;
                                 
-                                var closeArr = data.TryGetProperty("close", out var cArr) && cArr.ValueKind == JsonValueKind.Array ? cArr : default;
-                                var price = closeArr.ValueKind == JsonValueKind.Array && closeArr.GetArrayLength() > 0 ? closeArr[0].GetDecimal() : 0m;
+                                var price = 0m;
+                                if (data.TryGetProperty("close", out var cArr) && cArr.ValueKind == JsonValueKind.Array && cArr.GetArrayLength() > 0)
+                                {
+                                    price = cArr[0].GetDecimal();
+                                }
                                 
-                                var prevClose = data.TryGetProperty("chartPreviousClose", out var prev) && prev.ValueKind == JsonValueKind.Number ? prev.GetDecimal() : price;
+                                var prevClose = price;
+                                if (data.TryGetProperty("chartPreviousClose", out var prev) && prev.ValueKind == JsonValueKind.Number)
+                                {
+                                    prevClose = prev.GetDecimal();
+                                }
+                                
                                 var changeP = prevClose > 0 ? ((price - prevClose) / prevClose) * 100 : 0m;
                                 
                                 results.Add(new StockPriceResponse(sym, price, 0, changeP, DateTime.UtcNow, sym, null, null) { RegularMarketPreviousClose = prevClose });
