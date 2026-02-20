@@ -202,6 +202,21 @@ public class MarketDataService : IMarketDataService
             {
                 // Reset crumb on unauthorized in case it expired
                 if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized) _yahooCrumb = null;
+                
+                // FALLBACK TO SEARCH API
+                var searchUrl = string.Format(_configuration["MarketData:YahooSearchUrl"] ?? "https://query1.finance.yahoo.com/v1/finance/search?q={0}&quotesCount=10&newsCount=0", Uri.EscapeDataString(tickerSymbol));
+                var searchResponse = await _httpClient.GetAsync(searchUrl);
+                if (searchResponse.IsSuccessStatusCode)
+                {
+                    var searchContent = await searchResponse.Content.ReadAsStringAsync();
+                    var searchJson = JsonDocument.Parse(searchContent);
+                    if (searchJson.RootElement.TryGetProperty("quotes", out var searchQuotes) && searchQuotes.GetArrayLength() > 0)
+                    {
+                        var sq = searchQuotes[0];
+                        string? name = sq.TryGetProperty("longname", out var ln) ? ln.GetString() : sq.TryGetProperty("shortname", out var sn) ? sn.GetString() : null;
+                        return (name, null, null);
+                    }
+                }
                 return (null, null, null);
             }
 
@@ -305,6 +320,33 @@ public class MarketDataService : IMarketDataService
                 {
                     // Reset crumb on unauthorized in case it expired
                     if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized) _yahooCrumb = null;
+                    
+                    // FALLBACK TO SPARK API
+                    var sparkUrl = string.Format(_configuration["MarketData:YahooSparkUrl"] ?? "https://query1.finance.yahoo.com/v8/finance/spark?symbols={0}&interval=1d&range=1d", symbolStr);
+                    var sparkResponse = await _httpClient.GetAsync(sparkUrl);
+                    if (sparkResponse.IsSuccessStatusCode)
+                    {
+                        var sparkContent = await sparkResponse.Content.ReadAsStringAsync();
+                        var sparkJson = JsonDocument.Parse(sparkContent);
+                        foreach (var prop in sparkJson.RootElement.EnumerateObject())
+                        {
+                            try 
+                            {
+                                var sym = prop.Name;
+                                var data = prop.Value;
+                                if (data.ValueKind != JsonValueKind.Object) continue;
+                                
+                                var closeArr = data.TryGetProperty("close", out var cArr) && cArr.ValueKind == JsonValueKind.Array ? cArr : default;
+                                var price = closeArr.ValueKind == JsonValueKind.Array && closeArr.GetArrayLength() > 0 ? closeArr[0].GetDecimal() : 0m;
+                                
+                                var prevClose = data.TryGetProperty("chartPreviousClose", out var prev) && prev.ValueKind == JsonValueKind.Number ? prev.GetDecimal() : price;
+                                var changeP = prevClose > 0 ? ((price - prevClose) / prevClose) * 100 : 0m;
+                                
+                                results.Add(new StockPriceResponse(sym, price, 0, changeP, DateTime.UtcNow, sym, null, null) { RegularMarketPreviousClose = prevClose });
+                            }
+                            catch { }
+                        }
+                    }
                     continue;
                 }
 
