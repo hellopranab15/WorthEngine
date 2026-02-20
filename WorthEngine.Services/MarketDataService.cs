@@ -154,10 +154,10 @@ public class MarketDataService : IMarketDataService
             var baseUrl = _configuration["MarketData:YahooChartUrl"] ?? "https://query1.finance.yahoo.com/v8/finance/chart/{0}?interval=1d&range=1d";
             var url = string.Format(baseUrl, tickerSymbol);
             
-            _httpClient.DefaultRequestHeaders.Clear();
-            _httpClient.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0");
+            // Ensure cookies and User-Agent are loaded
+            await GetYahooCrumbAsync();
 
-            var response = await _httpClient.GetAsync(url);
+            var response = await _yahooClient.GetAsync(url);
             
             if (!response.IsSuccessStatusCode)
                 return null;
@@ -212,7 +212,7 @@ public class MarketDataService : IMarketDataService
                 
                 // FALLBACK TO SEARCH API
                 var searchUrl = string.Format(_configuration["MarketData:YahooSearchUrl"] ?? "https://query1.finance.yahoo.com/v1/finance/search?q={0}&quotesCount=10&newsCount=0", Uri.EscapeDataString(tickerSymbol));
-                var searchResponse = await _httpClient.GetAsync(searchUrl);
+                var searchResponse = await _yahooClient.GetAsync(searchUrl);
                 if (searchResponse.IsSuccessStatusCode)
                 {
                     var searchContent = await searchResponse.Content.ReadAsStringAsync();
@@ -268,10 +268,10 @@ public class MarketDataService : IMarketDataService
             var baseUrl = _configuration["MarketData:YahooSearchUrl"] ?? "https://query1.finance.yahoo.com/v1/finance/search?q={0}&quotesCount=10&newsCount=0";
             var url = string.Format(baseUrl, Uri.EscapeDataString(query));
             
-            _httpClient.DefaultRequestHeaders.Clear();
-            _httpClient.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0");
+            // Ensure cookies and User-Agent are loaded
+            await GetYahooCrumbAsync();
 
-            var response = await _httpClient.GetAsync(url);
+            var response = await _yahooClient.GetAsync(url);
             if (!response.IsSuccessStatusCode) return results;
 
             var content = await response.Content.ReadAsStringAsync();
@@ -388,7 +388,7 @@ public class MarketDataService : IMarketDataService
                     
                     // FALLBACK TO SPARK API
                     var sparkUrl = string.Format(_configuration["MarketData:YahooSparkUrl"] ?? "https://query1.finance.yahoo.com/v8/finance/spark?symbols={0}&interval=1d&range=1d", symbolStr);
-                    var sparkResponse = await _httpClient.GetAsync(sparkUrl);
+                    var sparkResponse = await _yahooClient.GetAsync(sparkUrl);
                     if (sparkResponse.IsSuccessStatusCode)
                     {
                         var sparkContent = await sparkResponse.Content.ReadAsStringAsync();
