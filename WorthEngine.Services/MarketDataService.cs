@@ -323,10 +323,68 @@ public class MarketDataService : IMarketDataService
 
                 var response = await _yahooClient.GetAsync(url);
                 
-                if (!response.IsSuccessStatusCode)
+                var isV7Empty = true;
+                string content = "";
+
+                if (response.IsSuccessStatusCode)
                 {
-                    // Reset crumb on unauthorized in case it expired
-                    if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized) _yahooCrumb = null;
+                    content = await response.Content.ReadAsStringAsync();
+                    try
+                    {
+                        var json = JsonDocument.Parse(content);
+                        if (json.RootElement.TryGetProperty("quoteResponse", out var qr) && 
+                            qr.TryGetProperty("result", out var quoteResults) && 
+                            quoteResults.ValueKind == JsonValueKind.Array && 
+                            quoteResults.GetArrayLength() > 0)
+                        {
+                            isV7Empty = false;
+                            foreach (var q in quoteResults.EnumerateArray())
+                            {
+                                var symbol = q.GetProperty("symbol").GetString() ?? "";
+                                var price = q.TryGetProperty("regularMarketPrice", out var rmp) ? rmp.GetDecimal() : 0;
+                                var changeP = q.TryGetProperty("regularMarketChangePercent", out var rcp) ? rcp.GetDecimal() : 0;
+                                var mCap = q.TryGetProperty("marketCap", out var cap) ? cap.GetInt64() : (long?)null;
+                                var name = q.TryGetProperty("shortName", out var sn) ? sn.GetString() : "";
+                                var sector = q.TryGetProperty("sector", out var sec) ? sec.GetString() : null;
+
+                                // Extended fields
+                                var ftwh = q.TryGetProperty("fiftyTwoWeekHigh", out var h52) ? h52.GetDecimal() : (decimal?)null;
+                                var ftwl = q.TryGetProperty("fiftyTwoWeekLow", out var l52) ? l52.GetDecimal() : (decimal?)null;
+                                var open = q.TryGetProperty("regularMarketOpen", out var rmo) ? rmo.GetDecimal() : (decimal?)null;
+                                var dayHigh = q.TryGetProperty("regularMarketDayHigh", out var rdh) ? rdh.GetDecimal() : (decimal?)null;
+                                var dayLow = q.TryGetProperty("regularMarketDayLow", out var rdl) ? rdl.GetDecimal() : (decimal?)null;
+                                var vol = q.TryGetProperty("regularMarketVolume", out var rmv) ? rmv.GetInt64() : (long?)null;
+                                var prevClose = q.TryGetProperty("regularMarketPreviousClose", out var rpc) ? rpc.GetDecimal() : (decimal?)null;
+
+                                results.Add(new StockPriceResponse(
+                                    symbol,
+                                    price,
+                                    0, // Current Value (not relevant for market data)
+                                    changeP, 
+                                    DateTime.UtcNow,
+                                    name,
+                                    sector,
+                                    mCap
+                                )
+                                {
+                                    FiftyTwoWeekHigh = ftwh,
+                                    FiftyTwoWeekLow = ftwl,
+                                    RegularMarketOpen = open,
+                                    RegularMarketDayHigh = dayHigh,
+                                    RegularMarketDayLow = dayLow,
+                                    RegularMarketVolume = vol,
+                                    RegularMarketPreviousClose = prevClose
+                                });
+                            }
+                        }
+                    }
+                    catch { }
+                }
+
+                if (!response.IsSuccessStatusCode || isV7Empty)
+                {
+                    // Reset crumb on unauthorized in case it expired. Empty array with 200 OK often means bad crumb.
+                    if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized || (response.IsSuccessStatusCode && isV7Empty)) _yahooCrumb = null;
                     
                     // FALLBACK TO SPARK API
                     var sparkUrl = string.Format(_configuration["MarketData:YahooSparkUrl"] ?? "https://query1.finance.yahoo.com/v8/finance/spark?symbols={0}&interval=1d&range=1d", symbolStr);
@@ -353,52 +411,6 @@ public class MarketDataService : IMarketDataService
                             }
                             catch { }
                         }
-                    }
-                    continue;
-                }
-
-                var content = await response.Content.ReadAsStringAsync();
-                var json = JsonDocument.Parse(content);
-                
-                if (json.RootElement.GetProperty("quoteResponse").TryGetProperty("result", out var quoteResults))
-                {
-                    foreach (var q in quoteResults.EnumerateArray())
-                    {
-                        var symbol = q.GetProperty("symbol").GetString() ?? "";
-                        var price = q.TryGetProperty("regularMarketPrice", out var rmp) ? rmp.GetDecimal() : 0;
-                        var changeP = q.TryGetProperty("regularMarketChangePercent", out var rcp) ? rcp.GetDecimal() : 0;
-                        var mCap = q.TryGetProperty("marketCap", out var cap) ? cap.GetInt64() : (long?)null;
-                        var name = q.TryGetProperty("shortName", out var sn) ? sn.GetString() : "";
-                        var sector = q.TryGetProperty("sector", out var sec) ? sec.GetString() : null;
-
-                        // Extended fields
-                        var ftwh = q.TryGetProperty("fiftyTwoWeekHigh", out var h52) ? h52.GetDecimal() : (decimal?)null;
-                        var ftwl = q.TryGetProperty("fiftyTwoWeekLow", out var l52) ? l52.GetDecimal() : (decimal?)null;
-                        var open = q.TryGetProperty("regularMarketOpen", out var rmo) ? rmo.GetDecimal() : (decimal?)null;
-                        var dayHigh = q.TryGetProperty("regularMarketDayHigh", out var rdh) ? rdh.GetDecimal() : (decimal?)null;
-                        var dayLow = q.TryGetProperty("regularMarketDayLow", out var rdl) ? rdl.GetDecimal() : (decimal?)null;
-                        var vol = q.TryGetProperty("regularMarketVolume", out var rmv) ? rmv.GetInt64() : (long?)null;
-                        var prevClose = q.TryGetProperty("regularMarketPreviousClose", out var rpc) ? rpc.GetDecimal() : (decimal?)null;
-
-                        results.Add(new StockPriceResponse(
-                            symbol,
-                            price,
-                            0, // Current Value (not relevant for market data)
-                            changeP, 
-                            DateTime.UtcNow,
-                            name,
-                            sector,
-                            mCap
-                        )
-                        {
-                            FiftyTwoWeekHigh = ftwh,
-                            FiftyTwoWeekLow = ftwl,
-                            RegularMarketOpen = open,
-                            RegularMarketDayHigh = dayHigh,
-                            RegularMarketDayLow = dayLow,
-                            RegularMarketVolume = vol,
-                            RegularMarketPreviousClose = prevClose
-                        });
                     }
                 }
             }
