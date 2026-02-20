@@ -7,9 +7,9 @@ using WorthEngine.Core.Helpers;
 
 namespace WorthEngine.Api.Controllers;
 
+[Authorize]
 [ApiController]
 [Route("api/market")]
-[Authorize]
 public class MarketDataController : ControllerBase
 {
     private readonly IMarketDataService _marketDataService;
