@@ -699,10 +699,11 @@ public class PortfolioService : IPortfolioService
     private void GenerateEpfContributions(Portfolio portfolio, int financialYear)
     {
         var startMonth = new DateTime(financialYear, 4, 1); // April
-        var currentMonth = DateTime.Now;
+        var targetDate = DateTime.Now.AddMonths(-1); // EPF is credited for the previous month
+        var targetMonth = new DateTime(targetDate.Year, targetDate.Month, 1);
 
         var month = startMonth;
-        while (month <= currentMonth)
+        while (month <= targetMonth)
         {
             decimal employeeShare = portfolio.EpfBasicPay!.Value * 0.12m; // 12% employee contribution
             
@@ -767,16 +768,17 @@ public class PortfolioService : IPortfolioService
         if (portfolio == null || portfolio.UserId != userId)
             throw new UnauthorizedAccessException("Portfolio not found or access denied");
 
-        // Auto-extend contributions to current month if behind
+        // Auto-extend contributions to previous month if behind
         if (portfolio.EpfContributions != null && portfolio.EpfContributions.Any())
         {
             var lastContribution = portfolio.EpfContributions.Max(c => c.Month);
-            var currentMonth = new DateTime(DateTime.Now.Year, DateTime.Now.Month, 1);
+            var targetDate = DateTime.Now.AddMonths(-1); // EPF is credited for the previous month
+            var targetMonth = new DateTime(targetDate.Year, targetDate.Month, 1);
             
-            if (lastContribution < currentMonth)
+            if (lastContribution < targetMonth)
             {
                 var nextMonth = lastContribution.AddMonths(1);
-                while (nextMonth <= currentMonth)
+                while (nextMonth <= targetMonth)
                 {
                     decimal employeeShare = portfolio.EpfBasicPay!.Value * 0.12m;
                     decimal epsContribution = 0;

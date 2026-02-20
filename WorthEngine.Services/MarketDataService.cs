@@ -115,11 +115,18 @@ public class MarketDataService : IMarketDataService
                     // Basic parsing of date might be needed if format varies, usually dd-MM-yyyy
                     DateTime.TryParseExact(latestNav.Date, "dd-MM-yyyy", null, System.Globalization.DateTimeStyles.None, out DateTime navDate);
                     
+                    decimal? prevNav = null;
+                    if (json.Data.Count > 1 && decimal.TryParse(json.Data[1].Nav, out decimal pNav))
+                    {
+                        prevNav = pNav;
+                    }
+                    
                     return new MfDetailsResponse(
                         json.Meta.SchemeCode.ToString(),
                         json.Meta.SchemeName,
                         nav,
-                        navDate
+                        navDate,
+                        prevNav
                     );
                 }
             }
