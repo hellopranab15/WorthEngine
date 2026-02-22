@@ -367,6 +367,13 @@ public class PortfolioService : IPortfolioService
         // Recalculate portfolio totals with current price/NAV
         RecalculatePortfolioTotals(portfolio, currentPrice);
         
+        // Auto-delete portfolio if units fall to zero or below
+        if (portfolio.UnitsHeld <= 0)
+        {
+            await _portfolioRepository.DeleteAsync(portfolio.Id);
+            return null; // Signals deletion to controller
+        }
+
         portfolio.LastUpdated = DateTime.UtcNow;
 
         await _portfolioRepository.UpdateAsync(portfolio);
