@@ -483,6 +483,62 @@ public class MarketDataService : IMarketDataService
             
         return await _mutualFundRepository.SearchAsync(query);
     }
+
+    /// <summary>
+    /// Fetches live commodity price per gram in INR.
+    /// Maps commodity subtypes to Yahoo Finance tickers (USD per troy ounce),
+    /// fetches USDINR exchange rate, and converts to ₹ per gram.
+    /// 1 troy ounce = 31.1035 grams
+    /// </summary>
+    public async Task<decimal?> GetCommodityPricePerGramAsync(string commoditySubType)
+    {
+        if (string.IsNullOrEmpty(commoditySubType))
+            return null;
+
+        // Map commodity subtype to Yahoo Finance ticker
+        var ticker = commoditySubType.ToUpper() switch
+        {
+            "GOLD" => "GC=F",
+            "SILVER" => "SI=F",
+            "PLATINUM" => "PL=F",
+            "COPPER" => "HG=F",
+            _ => null
+        };
+
+        if (ticker == null) return null;
+
+        try
+        {
+            // Fetch commodity price in USD (per troy ounce)
+            var priceUsdPerOz = await GetStockPriceAsync(ticker);
+            if (!priceUsdPerOz.HasValue) return null;
+
+            // Fetch USD to INR exchange rate
+            var usdInrRate = await GetStockPriceAsync("USDINR=X");
+            if (!usdInrRate.HasValue) return null;
+
+            // Convert: USD/troy oz → INR/gram
+            // For copper, Yahoo returns USD per pound (1 lb = 453.592 grams)
+            const decimal gramsPerTroyOunce = 31.1035m;
+            const decimal gramsPerPound = 453.592m;
+
+            decimal pricePerGramInr;
+            if (commoditySubType.ToUpper() == "COPPER")
+            {
+                pricePerGramInr = (priceUsdPerOz.Value / gramsPerPound) * usdInrRate.Value;
+            }
+            else
+            {
+                pricePerGramInr = (priceUsdPerOz.Value / gramsPerTroyOunce) * usdInrRate.Value;
+            }
+
+            return Math.Round(pricePerGramInr, 2);
+        }
+        catch
+        {
+            return null;
+        }
+    }
 }
 
 // MFAPI Response DTOs

@@ -101,9 +101,27 @@ public class DashboardService : IDashboardService
         var epfPortfolios = portfolios.Where(p => p.Type == "EPF").ToList();
         decimal totalEpfValue = epfPortfolios.Sum(p => p.CurrentValue);
 
-        // Calculate Overall XIRR (Stock + MF only, excluding EPF, NPS, SAVING)
+        // Calculate Commodity totals and XIRR
+        var commodityPortfolios = portfolios.Where(p => p.Type == "COMMODITY").ToList();
+        decimal totalCommodityValue = commodityPortfolios.Sum(p => p.CurrentValue);
+        decimal? commodityXirr = null;
+        if (commodityPortfolios.Any())
+        {
+            var commodityTransactions = commodityPortfolios.SelectMany(p => p.Transactions).ToList();
+            if (commodityTransactions.Any() && totalCommodityValue > 0)
+            {
+                try
+                {
+                    var xirrResult = _xirrService.CalculateXirr(commodityTransactions, totalCommodityValue);
+                    commodityXirr = xirrResult.Xirr;
+                }
+                catch { /* Ignore calculation errors */ }
+            }
+        }
+
+        // Calculate Overall XIRR (Stock + MF + Commodity, excluding EPF, NPS, SAVING)
         decimal? overallXirr = null;
-        var investablePortfolios = portfolios.Where(p => p.Type == "STOCK" || p.Type == "MF" || p.Type == "SIP").ToList();
+        var investablePortfolios = portfolios.Where(p => p.Type == "STOCK" || p.Type == "MF" || p.Type == "SIP" || p.Type == "COMMODITY").ToList();
         if (investablePortfolios.Any())
         {
             var allInvestableTransactions = investablePortfolios.SelectMany(p => p.Transactions).ToList();
@@ -153,7 +171,9 @@ public class DashboardService : IDashboardService
             MfXirr: mfXirr,
             TotalStockValue: totalStockValue,
             TotalMfValue: totalMfValue,
-            TotalEpfValue: totalEpfValue
+            TotalEpfValue: totalEpfValue,
+            TotalCommodityValue: totalCommodityValue,
+            CommodityXirr: commodityXirr
         );
     }
 }

@@ -53,7 +53,7 @@ public class Portfolio
     public string UserId { get; set; } = null!;
 
     [BsonElement("type")]
-    public string Type { get; set; } = null!; // SIP, EPF, NPS, SAVING, STOCK
+    public string Type { get; set; } = null!; // SIP, EPF, NPS, SAVING, STOCK, COMMODITY
 
     [BsonElement("providerName")]
     public string ProviderName { get; set; } = null!;
@@ -63,6 +63,9 @@ public class Portfolio
 
     [BsonElement("tickerSymbol")]
     public string? TickerSymbol { get; set; } // For Yahoo Finance (e.g., "TCS.NS")
+
+    [BsonElement("commoditySubType")]
+    public string? CommoditySubType { get; set; } // GOLD, SILVER, PLATINUM, COPPER
 
     [BsonElement("sipStartDate")]
     public DateTime? SipStartDate { get; set; }
