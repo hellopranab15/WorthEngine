@@ -18,7 +18,9 @@ public record DashboardSummary(
     decimal? MfXirr,
     decimal TotalStockValue,
     decimal TotalMfValue,
-    decimal TotalEpfValue
+    decimal TotalEpfValue,
+    decimal TotalCommodityValue,
+    decimal? CommodityXirr
 );
 
 public record AssetAllocation(string Type, decimal Value, decimal Percentage);
@@ -30,6 +32,7 @@ public record PortfolioRequest(
     string ProviderName,
     string? SchemeCode,
     string? TickerSymbol,
+    string? CommoditySubType,
     DateTime? SipStartDate,
     int? SipDeductionDay,
     decimal UnitsHeld,
@@ -59,6 +62,7 @@ public record PortfolioResponse(
     string ProviderName,
     string? SchemeCode,
     string? TickerSymbol,
+    string? CommoditySubType,
     DateTime? SipStartDate,
     int? SipDeductionDay,
     decimal UnitsHeld,

@@ -24,9 +24,10 @@ public class PortfolioService : IPortfolioService
 
         foreach (var portfolio in portfolios)
         {
-            // For stocks and mutual funds, fetch live prices
+            // For stocks, mutual funds, and commodities, fetch live prices
             if ((portfolio.Type == "STOCK" && !string.IsNullOrEmpty(portfolio.TickerSymbol)) ||
-                ((portfolio.Type == "MF" || portfolio.Type == "SIP") && !string.IsNullOrEmpty(portfolio.SchemeCode)))
+                ((portfolio.Type == "MF" || portfolio.Type == "SIP") && !string.IsNullOrEmpty(portfolio.SchemeCode)) ||
+                (portfolio.Type == "COMMODITY" && !string.IsNullOrEmpty(portfolio.CommoditySubType)))
             {
                 try
                 {
@@ -40,6 +41,10 @@ public class PortfolioService : IPortfolioService
                     else if (portfolio.Type == "MF" || portfolio.Type == "SIP")
                     {
                         livePrice = await _marketDataService.GetMutualFundNavAsync(portfolio.SchemeCode!);
+                    }
+                    else if (portfolio.Type == "COMMODITY")
+                    {
+                        livePrice = await _marketDataService.GetCommodityPricePerGramAsync(portfolio.CommoditySubType!);
                     }
 
                     if (livePrice.HasValue && portfolio.UnitsHeld > 0)
@@ -69,6 +74,7 @@ public class PortfolioService : IPortfolioService
                             portfolio.ProviderName,
                             portfolio.SchemeCode,
                             portfolio.TickerSymbol,
+                            portfolio.CommoditySubType,
                             portfolio.SipStartDate,
                             portfolio.SipDeductionDay,
                             portfolio.UnitsHeld,
@@ -134,6 +140,7 @@ public class PortfolioService : IPortfolioService
                         portfolio.ProviderName,
                         portfolio.SchemeCode,
                         portfolio.TickerSymbol,
+                        portfolio.CommoditySubType,
                         portfolio.SipStartDate,
                         portfolio.SipDeductionDay,
                         portfolio.UnitsHeld,
@@ -183,6 +190,7 @@ public class PortfolioService : IPortfolioService
                         portfolio.ProviderName,
                         portfolio.SchemeCode,
                         portfolio.TickerSymbol,
+                        portfolio.CommoditySubType,
                         portfolio.SipStartDate,
                         portfolio.SipDeductionDay,
                         portfolio.UnitsHeld,
@@ -222,6 +230,7 @@ public class PortfolioService : IPortfolioService
             portfolio.ProviderName,
             portfolio.SchemeCode,
             portfolio.TickerSymbol,
+            portfolio.CommoditySubType,
             portfolio.SipStartDate,
             portfolio.SipDeductionDay,
             portfolio.UnitsHeld,
@@ -243,6 +252,7 @@ public class PortfolioService : IPortfolioService
             ProviderName = request.ProviderName,
             SchemeCode = request.SchemeCode,
             TickerSymbol = request.TickerSymbol,
+            CommoditySubType = request.CommoditySubType,
             SipStartDate = request.SipStartDate,
             SipDeductionDay = request.SipDeductionDay,
             LastUpdated = DateTime.UtcNow,
@@ -312,6 +322,10 @@ public class PortfolioService : IPortfolioService
             {
                 newPrice = await _marketDataService.GetStockPriceAsync(portfolio.TickerSymbol);
             }
+            else if (portfolio.Type == "COMMODITY" && !string.IsNullOrEmpty(portfolio.CommoditySubType))
+            {
+                newPrice = await _marketDataService.GetCommodityPricePerGramAsync(portfolio.CommoditySubType);
+            }
 
             if (newPrice.HasValue)
             {
@@ -362,6 +376,14 @@ public class PortfolioService : IPortfolioService
             {
                 // If live NAV fetch fails, fall back to latest transaction NAV
             }
+        }
+        else if (portfolio.Type == "COMMODITY" && !string.IsNullOrEmpty(portfolio.CommoditySubType))
+        {
+            try
+            {
+                currentPrice = await _marketDataService.GetCommodityPricePerGramAsync(portfolio.CommoditySubType);
+            }
+            catch { }
         }
 
         // Recalculate portfolio totals with current price/NAV
@@ -503,6 +525,11 @@ public class PortfolioService : IPortfolioService
             var liveNav = await _marketDataService.GetMutualFundNavAsync(portfolio.SchemeCode);
             currentNav = liveNav ?? (portfolio.UnitsHeld > 0 ? portfolio.CurrentValue / portfolio.UnitsHeld : 0);
         }
+        else if (portfolio.Type == "COMMODITY" && !string.IsNullOrEmpty(portfolio.CommoditySubType))
+        {
+            var liveCommodityPrice = await _marketDataService.GetCommodityPricePerGramAsync(portfolio.CommoditySubType);
+            currentNav = liveCommodityPrice ?? (portfolio.UnitsHeld > 0 ? portfolio.CurrentValue / portfolio.UnitsHeld : 0);
+        }
         else
         {
             currentNav = portfolio.UnitsHeld > 0 ? portfolio.CurrentValue / portfolio.UnitsHeld : 0;
@@ -622,6 +649,14 @@ public class PortfolioService : IPortfolioService
                 // If live NAV fetch fails, fall back to latest transaction NAV
             }
         }
+        else if (portfolio.Type == "COMMODITY" && !string.IsNullOrEmpty(portfolio.CommoditySubType))
+        {
+            try
+            {
+                currentPrice = await _marketDataService.GetCommodityPricePerGramAsync(portfolio.CommoditySubType);
+            }
+            catch { }
+        }
 
         // Recalculate portfolio totals with current price/NAV
         RecalculatePortfolioTotals(portfolio, currentPrice);
@@ -645,7 +680,7 @@ public class PortfolioService : IPortfolioService
 
         // Calculate XIRR only for Stock, MF, and SIP (not for EPF, NPS, SAVING)
         decimal? xirr = null;
-        if ((p.Type == "STOCK" || p.Type == "MF" || p.Type == "SIP") && 
+        if ((p.Type == "STOCK" || p.Type == "MF" || p.Type == "SIP" || p.Type == "COMMODITY") && 
             p.Transactions.Any() && p.CurrentValue > 0)
         {
             try
@@ -662,6 +697,7 @@ public class PortfolioService : IPortfolioService
             p.ProviderName,
             p.SchemeCode,
             p.TickerSymbol,
+            p.CommoditySubType,
             p.SipStartDate,
             p.SipDeductionDay,
             p.UnitsHeld,

@@ -59,4 +59,5 @@ public interface IMarketDataService
     Task<List<StockPriceResponse>> GetQuotesAsync(List<string> symbols);
     Task SyncAmfiDataAsync(string url);
     Task<IEnumerable<MutualFundScheme>> SearchSchemesAsync(string query);
+    Task<decimal?> GetCommodityPricePerGramAsync(string commoditySubType);
 }
