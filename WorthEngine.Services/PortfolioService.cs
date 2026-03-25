@@ -742,7 +742,7 @@ public class PortfolioService : IPortfolioService
     private void GenerateEpfContributions(Portfolio portfolio, int financialYear)
     {
         var startMonth = new DateTime(financialYear, 4, 1); // April
-        var targetDate = DateTime.Now.AddMonths(-1); // EPF is credited for the previous month
+        var targetDate = DateTime.Now; // Include current month
         var targetMonth = new DateTime(targetDate.Year, targetDate.Month, 1);
 
         var month = startMonth;
@@ -815,7 +815,7 @@ public class PortfolioService : IPortfolioService
         if (portfolio.EpfContributions != null && portfolio.EpfContributions.Any())
         {
             var lastContribution = portfolio.EpfContributions.Max(c => c.Month);
-            var targetDate = DateTime.Now.AddMonths(-1); // EPF is credited for the previous month
+            var targetDate = DateTime.Now; // Include current month
             var targetMonth = new DateTime(targetDate.Year, targetDate.Month, 1);
             
             if (lastContribution < targetMonth)
